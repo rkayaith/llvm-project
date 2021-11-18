@@ -277,8 +277,13 @@ public:
     initializePattern<T>(*pattern);
 
     // Set a default debug name if one wasn't provided.
-    if (pattern->getDebugName().empty())
-      pattern->setDebugName(llvm::getTypeName<T>());
+    if (pattern->getDebugName().empty()) {
+      // Patterns are often defined in an anonymous namespace, drop the prefix
+      // to make the name a bit nicer.
+      StringRef name = llvm::getTypeName<T>();
+      name.consume_front("(anonymous namespace)::");
+      pattern->setDebugName(name);
+    }
     return pattern;
   }
 
