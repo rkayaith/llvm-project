@@ -72,8 +72,10 @@ TEST(CanonicalizerTest, TestDisablePatterns) {
       createCanonicalizerPass(GreedyRewriteConfig(), {"DisabledPattern"}));
 
   const char *const code = R"mlir(
+  module {
     %0:2 = "test.foo"() {sym_name = "A"} : () -> (i32, i32)
     %1 = "test.foo"() {sym_name = "B"} : () -> (f32)
+  }
   )mlir";
 
   OwningOpRef<ModuleOp> module = parseSourceString<ModuleOp>(code, &context);

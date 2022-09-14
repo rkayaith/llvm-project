@@ -62,9 +62,11 @@ static LogicalResult lowerToLLVMDialect(ModuleOp module) {
 
 TEST(MLIRExecutionEngine, SKIP_WITHOUT_JIT(AddInteger)) {
   std::string moduleStr = R"mlir(
-  func.func @foo(%arg0 : i32) -> i32 attributes { llvm.emit_c_interface } {
-    %res = arith.addi %arg0, %arg0 : i32
-    return %res : i32
+  module{
+    func.func @foo(%arg0 : i32) -> i32 attributes { llvm.emit_c_interface } {
+      %res = arith.addi %arg0, %arg0 : i32
+      return %res : i32
+    }
   }
   )mlir";
   DialectRegistry registry;
@@ -88,9 +90,11 @@ TEST(MLIRExecutionEngine, SKIP_WITHOUT_JIT(AddInteger)) {
 
 TEST(MLIRExecutionEngine, SKIP_WITHOUT_JIT(SubtractFloat)) {
   std::string moduleStr = R"mlir(
-  func.func @foo(%arg0 : f32, %arg1 : f32) -> f32 attributes { llvm.emit_c_interface } {
-    %res = arith.subf %arg0, %arg1 : f32
-    return %res : f32
+  module {
+    func.func @foo(%arg0 : f32, %arg1 : f32) -> f32 attributes { llvm.emit_c_interface } {
+      %res = arith.subf %arg0, %arg1 : f32
+      return %res : f32
+    }
   }
   )mlir";
   DialectRegistry registry;
@@ -118,10 +122,12 @@ TEST(NativeMemRefJit, SKIP_WITHOUT_JIT(ZeroRankMemref)) {
   ASSERT_EQ(*a->data, 42);
   a[{}] = 0;
   std::string moduleStr = R"mlir(
-  func.func @zero_ranked(%arg0 : memref<f32>) attributes { llvm.emit_c_interface } {
-    %cst42 = arith.constant 42.0 : f32
-    memref.store %cst42, %arg0[] : memref<f32>
-    return
+  module {
+    func.func @zero_ranked(%arg0 : memref<f32>) attributes { llvm.emit_c_interface } {
+      %cst42 = arith.constant 42.0 : f32
+      memref.store %cst42, %arg0[] : memref<f32>
+      return
+    }
   }
   )mlir";
   DialectRegistry registry;
@@ -152,11 +158,13 @@ TEST(NativeMemRefJit, SKIP_WITHOUT_JIT(RankOneMemref)) {
   }
 
   std::string moduleStr = R"mlir(
-  func.func @one_ranked(%arg0 : memref<?xf32>) attributes { llvm.emit_c_interface } {
-    %cst42 = arith.constant 42.0 : f32
-    %cst5 = arith.constant 5 : index
-    memref.store %cst42, %arg0[%cst5] : memref<?xf32>
-    return
+  module {
+    func.func @one_ranked(%arg0 : memref<?xf32>) attributes { llvm.emit_c_interface } {
+      %cst42 = arith.constant 42.0 : f32
+      %cst5 = arith.constant 5 : index
+      memref.store %cst42, %arg0[%cst5] : memref<?xf32>
+      return
+    }
   }
   )mlir";
   DialectRegistry registry;
@@ -204,13 +212,15 @@ TEST(NativeMemRefJit, SKIP_WITHOUT_JIT(BasicMemref)) {
     }
   }
   std::string moduleStr = R"mlir(
-  func.func @rank2_memref(%arg0 : memref<?x?xf32>, %arg1 : memref<?x?xf32>) attributes { llvm.emit_c_interface } {
-    %x = arith.constant 2 : index
-    %y = arith.constant 1 : index
-    %cst42 = arith.constant 42.0 : f32
-    memref.store %cst42, %arg0[%y, %x] : memref<?x?xf32>
-    memref.store %cst42, %arg1[%x, %y] : memref<?x?xf32>
-    return
+  module {
+    func.func @rank2_memref(%arg0 : memref<?x?xf32>, %arg1 : memref<?x?xf32>) attributes { llvm.emit_c_interface } {
+      %x = arith.constant 2 : index
+      %y = arith.constant 1 : index
+      %cst42 = arith.constant 42.0 : f32
+      memref.store %cst42, %arg0[%y, %x] : memref<?x?xf32>
+      memref.store %cst42, %arg1[%x, %y] : memref<?x?xf32>
+      return
+    }
   }
   )mlir";
   DialectRegistry registry;
@@ -255,11 +265,13 @@ TEST(NativeMemRefJit, MAYBE_JITCallback) {
     elt = count++;
 
   std::string moduleStr = R"mlir(
-  func.func private @callback(%arg0: memref<?x?xf32>, %coefficient: i32)  attributes { llvm.emit_c_interface }
-  func.func @caller_for_callback(%arg0: memref<?x?xf32>, %coefficient: i32) attributes { llvm.emit_c_interface } {
-    %unranked = memref.cast %arg0: memref<?x?xf32> to memref<*xf32>
-    call @callback(%arg0, %coefficient) : (memref<?x?xf32>, i32) -> ()
-    return
+  module {
+    func.func private @callback(%arg0: memref<?x?xf32>, %coefficient: i32)  attributes { llvm.emit_c_interface }
+    func.func @caller_for_callback(%arg0: memref<?x?xf32>, %coefficient: i32) attributes { llvm.emit_c_interface } {
+      %unranked = memref.cast %arg0: memref<?x?xf32> to memref<*xf32>
+      call @callback(%arg0, %coefficient) : (memref<?x?xf32>, i32) -> ()
+      return
+    }
   }
   )mlir";
   DialectRegistry registry;

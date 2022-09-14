@@ -17,7 +17,9 @@ using namespace mlir;
 namespace {
 TEST(MLIRParser, ResourceKeyConflict) {
   std::string moduleStr = R"mlir(
-    "test.use1"() {attr = #test.e1di64_elements<blob1> : tensor<3xi64> } : () -> ()
+    module {
+      "test.use1"() {attr = #test.e1di64_elements<blob1> : tensor<3xi64> } : () -> ()
+    }
 
     {-#
       dialect_resources: {
@@ -28,7 +30,9 @@ TEST(MLIRParser, ResourceKeyConflict) {
     #-}
   )mlir";
   std::string moduleStr2 = R"mlir(
-    "test.use2"() {attr = #test.e1di64_elements<blob1> : tensor<3xi64> } : () -> ()
+    module {
+      "test.use2"() {attr = #test.e1di64_elements<blob1> : tensor<3xi64> } : () -> ()
+    }
 
     {-#
       dialect_resources: {

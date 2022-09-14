@@ -271,10 +271,8 @@ TEST(DataLayout, NullSpec) {
   registry.insert<DLTIDialect, DLTestDialect>();
   MLIRContext ctx(registry);
 
-  OwningOpRef<ModuleOp> module = parseSourceString<ModuleOp>(ir, &ctx);
-  auto op =
-      cast<DataLayoutOpInterface>(module->getBody()->getOperations().front());
-  DataLayout layout(op);
+  auto op = parseSourceString<DataLayoutOpInterface>(ir, &ctx);
+  DataLayout layout(*op);
   EXPECT_EQ(layout.getTypeSize(IntegerType::get(&ctx, 42)), 42u);
   EXPECT_EQ(layout.getTypeSize(Float16Type::get(&ctx)), 16u);
   EXPECT_EQ(layout.getTypeSizeInBits(IntegerType::get(&ctx, 42)), 8u * 42u);
@@ -294,10 +292,8 @@ TEST(DataLayout, EmptySpec) {
   registry.insert<DLTIDialect, DLTestDialect>();
   MLIRContext ctx(registry);
 
-  OwningOpRef<ModuleOp> module = parseSourceString<ModuleOp>(ir, &ctx);
-  auto op =
-      cast<DataLayoutOpInterface>(module->getBody()->getOperations().front());
-  DataLayout layout(op);
+  auto op = parseSourceString<DataLayoutOpInterface>(ir, &ctx);
+  DataLayout layout(*op);
   EXPECT_EQ(layout.getTypeSize(IntegerType::get(&ctx, 42)), 42u);
   EXPECT_EQ(layout.getTypeSize(Float16Type::get(&ctx)), 16u);
   EXPECT_EQ(layout.getTypeSizeInBits(IntegerType::get(&ctx, 42)), 8u * 42u);
@@ -320,10 +316,8 @@ TEST(DataLayout, SpecWithEntries) {
   registry.insert<DLTIDialect, DLTestDialect>();
   MLIRContext ctx(registry);
 
-  OwningOpRef<ModuleOp> module = parseSourceString<ModuleOp>(ir, &ctx);
-  auto op =
-      cast<DataLayoutOpInterface>(module->getBody()->getOperations().front());
-  DataLayout layout(op);
+  auto op = parseSourceString<DataLayoutOpInterface>(ir, &ctx);
+  DataLayout layout(*op);
   EXPECT_EQ(layout.getTypeSize(IntegerType::get(&ctx, 42)), 5u);
   EXPECT_EQ(layout.getTypeSize(Float16Type::get(&ctx)), 6u);
   EXPECT_EQ(layout.getTypeSizeInBits(IntegerType::get(&ctx, 42)), 40u);
@@ -352,10 +346,8 @@ TEST(DataLayout, Caching) {
   registry.insert<DLTIDialect, DLTestDialect>();
   MLIRContext ctx(registry);
 
-  OwningOpRef<ModuleOp> module = parseSourceString<ModuleOp>(ir, &ctx);
-  auto op =
-      cast<DataLayoutOpInterface>(module->getBody()->getOperations().front());
-  DataLayout layout(op);
+  auto op = parseSourceString<DataLayoutOpInterface>(ir, &ctx);
+  DataLayout layout(*op);
 
   unsigned sum = 0;
   sum += layout.getTypeSize(SingleQueryType::get(&ctx));
@@ -367,7 +359,7 @@ TEST(DataLayout, Caching) {
 
   // A fresh data layout has a new cache, so the call to it should be dispatched
   // down to the type and abort the proces.
-  DataLayout second(op);
+  DataLayout second(*op);
   ASSERT_DEATH(second.getTypeSize(SingleQueryType::get(&ctx)), "repeated call");
 }
 
@@ -383,16 +375,14 @@ TEST(DataLayout, CacheInvalidation) {
   registry.insert<DLTIDialect, DLTestDialect>();
   MLIRContext ctx(registry);
 
-  OwningOpRef<ModuleOp> module = parseSourceString<ModuleOp>(ir, &ctx);
-  auto op =
-      cast<DataLayoutOpInterface>(module->getBody()->getOperations().front());
-  DataLayout layout(op);
+  auto op = parseSourceString<DataLayoutOpInterface>(ir, &ctx);
+  DataLayout layout(*op);
 
   // Normal query is fine.
   EXPECT_EQ(layout.getTypeSize(Float16Type::get(&ctx)), 6u);
 
   // Replace the data layout spec with a new, empty spec.
-  op->setAttr(kAttrName, CustomDataLayoutSpec::get(&ctx, {}));
+  op.get()->setAttr(kAttrName, CustomDataLayoutSpec::get(&ctx, {}));
 
   // Data layout is no longer valid and should trigger assertion when queried.
 #ifndef NDEBUG
@@ -409,10 +399,8 @@ TEST(DataLayout, UnimplementedTypeInterface) {
   registry.insert<DLTIDialect, DLTestDialect>();
   MLIRContext ctx(registry);
 
-  OwningOpRef<ModuleOp> module = parseSourceString<ModuleOp>(ir, &ctx);
-  auto op =
-      cast<DataLayoutOpInterface>(module->getBody()->getOperations().front());
-  DataLayout layout(op);
+  auto op = parseSourceString<DataLayoutOpInterface>(ir, &ctx);
+  DataLayout layout(*op);
 
   ASSERT_DEATH(layout.getTypeSize(TypeNoLayout::get(&ctx)),
                "neither the scoping op nor the type class provide data layout "
@@ -428,10 +416,8 @@ TEST(DataLayout, SevenBitByte) {
   registry.insert<DLTIDialect, DLTestDialect>();
   MLIRContext ctx(registry);
 
-  OwningOpRef<ModuleOp> module = parseSourceString<ModuleOp>(ir, &ctx);
-  auto op =
-      cast<DataLayoutOpInterface>(module->getBody()->getOperations().front());
-  DataLayout layout(op);
+  auto op = parseSourceString<DataLayoutOpInterface>(ir, &ctx);
+  DataLayout layout(*op);
 
   EXPECT_EQ(layout.getTypeSizeInBits(IntegerType::get(&ctx, 42)), 42u);
   EXPECT_EQ(layout.getTypeSizeInBits(IntegerType::get(&ctx, 32)), 32u);

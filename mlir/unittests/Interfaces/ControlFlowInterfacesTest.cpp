@@ -127,10 +127,9 @@ TEST(RegionBranchOpInterface, MutuallyExclusiveOps) {
   registry.insert<CFTestDialect>();
   MLIRContext ctx(registry);
 
-  OwningOpRef<ModuleOp> module = parseSourceString<ModuleOp>(ir, &ctx);
-  Operation *testOp = &module->getBody()->getOperations().front();
-  Operation *op1 = &testOp->getRegion(0).front().front();
-  Operation *op2 = &testOp->getRegion(1).front().front();
+  OwningOpRef<Operation *> testOp = parseSourceString(ir, &ctx);
+  Operation *op1 = &testOp.get()->getRegion(0).front().front();
+  Operation *op2 = &testOp.get()->getRegion(1).front().front();
 
   EXPECT_TRUE(insideMutuallyExclusiveRegions(op1, op2));
   EXPECT_TRUE(insideMutuallyExclusiveRegions(op2, op1));
@@ -148,10 +147,9 @@ TEST(RegionBranchOpInterface, MutuallyExclusiveOps2) {
   registry.insert<CFTestDialect>();
   MLIRContext ctx(registry);
 
-  OwningOpRef<ModuleOp> module = parseSourceString<ModuleOp>(ir, &ctx);
-  Operation *testOp = &module->getBody()->getOperations().front();
-  Operation *op1 = &testOp->getRegion(0).front().front();
-  Operation *op2 = &testOp->getRegion(1).front().front();
+  OwningOpRef<Operation *> testOp = parseSourceString(ir, &ctx);
+  Operation *op1 = &testOp.get()->getRegion(0).front().front();
+  Operation *op2 = &testOp.get()->getRegion(1).front().front();
 
   EXPECT_TRUE(insideMutuallyExclusiveRegions(op1, op2));
   EXPECT_TRUE(insideMutuallyExclusiveRegions(op2, op1));
@@ -169,10 +167,9 @@ TEST(RegionBranchOpInterface, NotMutuallyExclusiveOps) {
   registry.insert<CFTestDialect>();
   MLIRContext ctx(registry);
 
-  OwningOpRef<ModuleOp> module = parseSourceString<ModuleOp>(ir, &ctx);
-  Operation *testOp = &module->getBody()->getOperations().front();
-  Operation *op1 = &testOp->getRegion(0).front().front();
-  Operation *op2 = &testOp->getRegion(1).front().front();
+  OwningOpRef<Operation *> testOp = parseSourceString(ir, &ctx);
+  Operation *op1 = &testOp.get()->getRegion(0).front().front();
+  Operation *op2 = &testOp.get()->getRegion(1).front().front();
 
   EXPECT_FALSE(insideMutuallyExclusiveRegions(op1, op2));
   EXPECT_FALSE(insideMutuallyExclusiveRegions(op2, op1));
@@ -196,13 +193,12 @@ TEST(RegionBranchOpInterface, NestedMutuallyExclusiveOps) {
   registry.insert<CFTestDialect>();
   MLIRContext ctx(registry);
 
-  OwningOpRef<ModuleOp> module = parseSourceString<ModuleOp>(ir, &ctx);
-  Operation *testOp = &module->getBody()->getOperations().front();
+  OwningOpRef<Operation *> testOp = parseSourceString(ir, &ctx);
   Operation *op1 =
-      &testOp->getRegion(0).front().front().getRegion(0).front().front();
-  Operation *op2 = &testOp->getRegion(1).front().front();
+      &testOp.get()->getRegion(0).front().front().getRegion(0).front().front();
+  Operation *op2 = &testOp.get()->getRegion(1).front().front();
   Operation *op3 =
-      &testOp->getRegion(0).front().front().getRegion(1).front().front();
+      &testOp.get()->getRegion(0).front().front().getRegion(1).front().front();
 
   EXPECT_TRUE(insideMutuallyExclusiveRegions(op1, op2));
   EXPECT_TRUE(insideMutuallyExclusiveRegions(op3, op2));
@@ -222,12 +218,11 @@ TEST(RegionBranchOpInterface, RecursiveRegions) {
   registry.insert<CFTestDialect>();
   MLIRContext ctx(registry);
 
-  OwningOpRef<ModuleOp> module = parseSourceString<ModuleOp>(ir, &ctx);
-  Operation *testOp = &module->getBody()->getOperations().front();
-  auto regionOp = cast<RegionBranchOpInterface>(testOp);
-  Operation *op1 = &testOp->getRegion(0).front().front();
-  Operation *op2 = &testOp->getRegion(1).front().front();
-  Operation *op3 = &testOp->getRegion(2).front().front();
+  OwningOpRef<Operation *> testOp = parseSourceString(ir, &ctx);
+  auto regionOp = cast<RegionBranchOpInterface>(testOp.get());
+  Operation *op1 = &testOp.get()->getRegion(0).front().front();
+  Operation *op2 = &testOp.get()->getRegion(1).front().front();
+  Operation *op3 = &testOp.get()->getRegion(2).front().front();
 
   EXPECT_TRUE(regionOp.isRepetitiveRegion(0));
   EXPECT_TRUE(regionOp.isRepetitiveRegion(1));
@@ -249,10 +244,9 @@ TEST(RegionBranchOpInterface, NotRecursiveRegions) {
   registry.insert<CFTestDialect>();
   MLIRContext ctx(registry);
 
-  OwningOpRef<ModuleOp> module = parseSourceString<ModuleOp>(ir, &ctx);
-  Operation *testOp = &module->getBody()->getOperations().front();
-  Operation *op1 = &testOp->getRegion(0).front().front();
-  Operation *op2 = &testOp->getRegion(1).front().front();
+  OwningOpRef<Operation *> testOp = parseSourceString(ir, &ctx);
+  Operation *op1 = &testOp.get()->getRegion(0).front().front();
+  Operation *op2 = &testOp.get()->getRegion(1).front().front();
 
   EXPECT_EQ(getEnclosingRepetitiveRegion(op1), nullptr);
   EXPECT_EQ(getEnclosingRepetitiveRegion(op2), nullptr);

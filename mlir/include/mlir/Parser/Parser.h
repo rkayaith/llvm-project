@@ -48,7 +48,8 @@ inline OwningOpRef<ContainerOpT> constructContainerOpForParserIfNecessary(
 
   // If not, then build a new top-level op if a concrete operation type was
   // specified.
-  if constexpr (std::is_same_v<ContainerOpT, Operation *>) {
+  if constexpr (std::is_same_v<ContainerOpT, Operation *> ||
+                IsInterface<ContainerOpT>::value) {
     return emitError(sourceFileLoc)
                << "source must contain a single top-level operation, found: "
                << parsedBlock->getOperations().size(),
