@@ -18,6 +18,29 @@
 #include "mlir/Parser/Parser.h"
 
 namespace mlir {
+/// TODO (rk)
+inline OwningOpRef<ModuleOp>
+parseSourceFileWithImplicitModule(llvm::SourceMgr &sourceMgr,
+                                  const ParserConfig &config) {
+  OwningOpRef<ModuleOp> mod =
+      ModuleOp::create(UnknownLoc::get(config.getContext()));
+  Block &block = *mod->getBody();
+
+  LocationAttr loc;
+  if (failed(parseSourceFile(sourceMgr, &block, config, &loc)))
+    return nullptr;
+  mod->getOperation()->setLoc(loc);
+
+  if (llvm::hasSingleElement(block)) {
+    if (auto op = dyn_cast<ModuleOp>(block.front())) {
+      op->remove();
+      mod = op;
+    }
+  }
+
+  return mod;
+}
+
 /// This parses the file specified by the indicated SourceMgr. If parsing was
 /// not successful, null is returned and an error message is emitted through the
 /// error handler registered in the context.
@@ -26,10 +49,8 @@ namespace mlir {
 inline OwningOpRef<Operation *>
 parseSourceFileForTool(llvm::SourceMgr &sourceMgr, const ParserConfig &config,
                        bool insertImplicitModule) {
-  if (insertImplicitModule) {
-    // TODO: Move implicit module logic out of 'parseSourceFile' and into here.
-    return parseSourceFile<ModuleOp>(sourceMgr, config);
-  }
+  if (insertImplicitModule)
+    return parseSourceFileWithImplicitModule(sourceMgr, config);
   return parseSourceFile(sourceMgr, config);
 }
 } // namespace mlir

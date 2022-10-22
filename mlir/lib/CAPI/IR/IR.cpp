@@ -15,7 +15,6 @@
 #include "mlir/CAPI/Support.h"
 #include "mlir/CAPI/Utils.h"
 #include "mlir/IR/Attributes.h"
-#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/Location.h"
 #include "mlir/IR/Operation.h"
@@ -23,6 +22,9 @@
 #include "mlir/IR/Verifier.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Parser/Parser.h"
+#include "mlir/Tools/ParseUtilties.h"
+#include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/SourceMgr.h"
 
 #include <cstddef>
 
@@ -199,11 +201,13 @@ MlirModule mlirModuleCreateEmpty(MlirLocation location) {
 }
 
 MlirModule mlirModuleCreateParse(MlirContext context, MlirStringRef module) {
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(unwrap(module), unwrap(context));
-  if (!owning)
+  auto memBuffer = llvm::MemoryBuffer::getMemBuffer(unwrap(module));
+  if (!memBuffer)
     return MlirModule{nullptr};
-  return MlirModule{owning.release().getOperation()};
+  llvm::SourceMgr sourceMgr;
+  sourceMgr.AddNewSourceBuffer(std::move(memBuffer), SMLoc());
+  ParserConfig config(unwrap(context));
+  return wrap(parseSourceFileWithImplicitModule(sourceMgr, config).release());
 }
 
 MlirContext mlirModuleGetContext(MlirModule module) {
