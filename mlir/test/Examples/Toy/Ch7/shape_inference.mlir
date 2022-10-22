@@ -2,6 +2,7 @@
 
 // Check the result of inlining+shape inference on an input module.
 
+module {
 toy.func private @multiply_transpose(%arg0: tensor<*xf64>, %arg1: tensor<*xf64>) -> tensor<*xf64> {
   %0 = toy.transpose(%arg0 : tensor<*xf64>) to tensor<*xf64>
   %1 = toy.transpose(%arg1 : tensor<*xf64>) to tensor<*xf64>
@@ -17,6 +18,7 @@ toy.func @main() {
   %5 = toy.generic_call @multiply_transpose(%3, %1) : (tensor<2x3xf64>, tensor<2x3xf64>) -> tensor<*xf64>
   toy.print %5 : tensor<*xf64>
   toy.return
+}
 }
 
 // CHECK-NOT: func @multiply_transpose
