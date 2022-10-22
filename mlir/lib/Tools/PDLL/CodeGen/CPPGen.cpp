@@ -109,9 +109,9 @@ struct {0} : ::mlir::PDLPatternModule {{
 )";
   os << llvm::formatv(patternClassStartStr, patternName);
 
-  os << "R\"mlir(";
+  os << "R\"mlir(module{";
   pattern->print(os, OpPrintingFlags().enableDebugInfo());
-  os << "\n    )mlir\", context)) {\n";
+  os << "\n    })mlir\", context)) {\n";
 
   // Register any native functions used within the pattern.
   StringSet<> registeredNativeFunctions;
