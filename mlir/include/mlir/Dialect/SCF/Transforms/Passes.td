@@ -151,4 +151,34 @@ def SCFForToWhileLoop : Pass<"scf-for-to-while"> {
   }];
 }
 
+def RotateWhileLoopPass : Pass<"scf-rotate-while"> {
+  let summary = "Rotate SCF while loops";
+  let description = [{
+    todo
+    ```
+    // initial:
+    while (before()) {
+      after()
+    }
+
+    // rotated:
+    if (before()) {
+      do {
+        after()
+        cond = before()
+      } while(cond)
+    }
+    ```
+    TODO: why not this?:
+    ```
+    cond = before()
+    while cond {
+      after()
+      cond = before()
+    }
+    ```
+    -
+  }];
+}
+
 #endif // MLIR_DIALECT_SCF_PASSES
