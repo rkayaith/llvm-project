@@ -14,6 +14,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/DeviceMappingInterface.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/Dialect/UB/IR/UBOps.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/FunctionInterfaces.h"
 #include "mlir/IR/IRMapping.h"
@@ -3927,12 +3928,101 @@ struct WhileRemoveDuplicatedResults : public OpRewritePattern<WhileOp> {
 };
 } // namespace
 
+static LogicalResult ifInBefore(WhileOp whileOp, PatternRewriter &r) {
+  ConditionOp cond = whileOp.getConditionOp();
+  auto ifOp = dyn_cast_or_null<IfOp>(cond->getPrevNode());
+  if (!ifOp || ifOp.getCondition() != cond.getCondition())
+    return r.notifyMatchFailure(whileOp, "last op isn't `scf.if(%cond)`");
+
+  SmallVector<std::pair<OpOperand &, Value>> operandUpdates;
+
+  auto getAfterArgMatchingValue = [](WhileOp op, Value arg) -> Value {
+    ValueRange condArgs = op.getConditionOp().getArgs();
+    if (auto it = llvm::find(condArgs, arg); it != condArgs.end())
+      return op.getAfterArguments()[it - condArgs.begin()];
+    return {};
+  };
+  auto getResultMatchingValue = [](WhileOp op, Value arg) -> Value {
+    ValueRange condArgs = op.getConditionOp().getArgs();
+    if (auto it = llvm::find(condArgs, arg); it != condArgs.end())
+      return op.getResults()[it - condArgs.begin()];
+    return {};
+  };
+
+  for (Operation &op : ifOp.getThenRegion().getOps()) {
+    for (OpOperand &operand : op.getOpOperands()) {
+      if (operand.get().getParentBlock() == whileOp.getBeforeBody()) {
+        if (Value v = getAfterArgMatchingValue(whileOp, operand.get())) {
+          operandUpdates.push_back({operand, v});
+        } else {
+          // TODO: This could be made to work by yielding the extra values.
+          return r.notifyMatchFailure(whileOp,
+                                      "`if.then` block uses values that are "
+                                      "only defined inside `before` block");
+        }
+      }
+    }
+  }
+
+  for (Operation &op : ifOp.getElseRegion().getOps()) {
+    for (OpOperand &operand : op.getOpOperands()) {
+      if (operand.get().getParentBlock() == whileOp.getBeforeBody()) {
+        if (Value v = getResultMatchingValue(whileOp, operand.get())) {
+          operandUpdates.push_back({operand, v});
+        } else {
+          // TODO: This could be made to work by yielding the extra values.
+          return r.notifyMatchFailure(whileOp,
+                                      "`if.else` block uses values that are "
+                                      "only defined inside `before` block");
+        }
+      }
+    }
+  }
+
+  // We can apply updates now that the match can no longer fail.
+  for (std::pair<OpOperand &, Value> &update : operandUpdates)
+    r.updateRootInPlace(update.first.getOwner(),
+                        [&]() { update.first.set(update.second); });
+
+  // Update 'after' region to directly use values defined inside 'then' block.
+  for (auto [condArg, afterArg] : llvm::zip(whileOp.getConditionOp().getArgs(),
+                                            whileOp.getAfterArguments())) {
+    if (condArg.getDefiningOp() == ifOp) {
+      Value thenResult =
+          ifOp.thenYield()
+              .getResults()[cast<OpResult>(condArg).getResultNumber()];
+      r.replaceAllUsesWith(afterArg, thenResult);
+    }
+  }
+
+  // Poison remaining uses of 'if' results; there should be no "real" uses at
+  // this point, and further canonicalizations should clean this up.
+  // TODO: We should really just delete the remaining uses here, to be 100%
+  // sure...
+  r.setInsertionPointAfter(ifOp);
+  for (Value ifRes : ifOp.getResults()) {
+    auto poisonOp =
+        r.create<ub::PoisonOp>(ifRes.getLoc(), ifRes.getType(), nullptr);
+    r.replaceAllUsesWith(ifRes, poisonOp);
+  }
+
+  r.eraseOp(ifOp.thenYield());
+  r.inlineBlockBefore(ifOp.thenBlock(), whileOp.getYieldOp());
+  if (ifOp.elseBlock()) {
+    r.eraseOp(ifOp.elseYield());
+    r.inlineBlockBefore(ifOp.elseBlock(), whileOp->getNextNode());
+  }
+  r.eraseOp(ifOp);
+  return success();
+}
+
 void WhileOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                           MLIRContext *context) {
   results.add<RemoveLoopInvariantArgsFromBeforeBlock,
               RemoveLoopInvariantValueYielded, WhileConditionTruth,
               WhileCmpCond, WhileUnusedResult, WhileRemoveDuplicatedResults,
               WhileRemoveUnusedArgs>(context);
+  results.add(ifInBefore);
 }
 
 //===----------------------------------------------------------------------===//
