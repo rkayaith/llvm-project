@@ -3949,13 +3949,35 @@ static LogicalResult ifInBefore(WhileOp whileOp, PatternRewriter &r) {
     return {};
   };
 
+  ValueRange condArgs = whileOp.getConditionOp().getArgs();
+  llvm::SmallSetVector<Value, 8> newCondArgs(condArgs.begin(), condArgs.end());
+  // FIXME: this is (probably?) handled by other patterns, making it hard to
+  // test. bail out early for now until i figure out how to test.
+  if (newCondArgs.size() != condArgs.size())
+    return r.notifyMatchFailure(whileOp, "has redundant cond args");
+
+  // 1a find all `after`-def uses inside `ifOp.then`:
+  //   - if it's in `condArgs`, map *operand* to `afterArgs[condArgs.index(def)]`
+  //   - else, note that we need a new `condArg`/`afterArg`/`result`, and map *operand* to the `afterArg` somehow
+  // 1b find all `after`-defs used inside `ifOp.else`:
+  //   - if it's in `condArgs`, map *operand* to `results[condArgs.index(def)]`
+  //   - else, note that we need a new `condArg`/`afterArg`/`result`, and map *operand* to the `result` somehow
+  // 2. for each use of `ifOp` (all of them are in `condArgs`, since no other ops are after the ifop):
+  //   - map `beforeArgs[condArgs.index(res)]` to `ifOp.thenYield.operands[res.resultNumber]`
+  //   - map `while.results[condArgs.index(res)]` to `ifOp.elseYield.operands[res.resultNumber]`
+  //   - mark `res` for removal from `condArgs`/`afterArgs`/`results` (once we delete the `if`, we don't have anything to yield)
+  // 3. modify ir
+  //   - update `condArgs` and `afterArgs` and `results`
+  //   - inline `if.then` to start of `while.after`
+  //   - inline `if.else` to after `while`
+  //   - apply mappings
+
   for (Operation &op : ifOp.getThenRegion().getOps()) {
     for (OpOperand &operand : op.getOpOperands()) {
       if (operand.get().getParentBlock() == whileOp.getBeforeBody()) {
         if (Value v = getAfterArgMatchingValue(whileOp, operand.get())) {
           operandUpdates.push_back({operand, v});
         } else {
-          // TODO: This could be made to work by yielding the extra values.
           return r.notifyMatchFailure(whileOp,
                                       "`if.then` block uses values that are "
                                       "only defined inside `before` block");
@@ -4007,7 +4029,8 @@ static LogicalResult ifInBefore(WhileOp whileOp, PatternRewriter &r) {
   }
 
   r.eraseOp(ifOp.thenYield());
-  r.inlineBlockBefore(ifOp.thenBlock(), whileOp.getYieldOp());
+  r.inlineBlockBefore(ifOp.thenBlock(), whileOp.getAfterBody(),
+                      whileOp.getAfterBody()->begin());
   if (ifOp.elseBlock()) {
     r.eraseOp(ifOp.elseYield());
     r.inlineBlockBefore(ifOp.elseBlock(), whileOp->getNextNode());
