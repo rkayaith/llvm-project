@@ -3934,100 +3934,101 @@ static LogicalResult ifInBefore(WhileOp whileOp, PatternRewriter &r) {
   if (!ifOp || ifOp.getCondition() != cond.getCondition())
     return r.notifyMatchFailure(whileOp, "last op isn't `scf.if(%cond)`");
 
-  SmallVector<std::pair<OpOperand &, Value>> operandUpdates;
-
-  auto getAfterArgMatchingValue = [](WhileOp op, Value arg) -> Value {
-    ValueRange condArgs = op.getConditionOp().getArgs();
-    if (auto it = llvm::find(condArgs, arg); it != condArgs.end())
-      return op.getAfterArguments()[it - condArgs.begin()];
-    return {};
-  };
-  auto getResultMatchingValue = [](WhileOp op, Value arg) -> Value {
-    ValueRange condArgs = op.getConditionOp().getArgs();
-    if (auto it = llvm::find(condArgs, arg); it != condArgs.end())
-      return op.getResults()[it - condArgs.begin()];
-    return {};
-  };
-
-  ValueRange condArgs = whileOp.getConditionOp().getArgs();
-  llvm::SmallSetVector<Value, 8> newCondArgs(condArgs.begin(), condArgs.end());
-  // FIXME: this is (probably?) handled by other patterns, making it hard to
-  // test. bail out early for now until i figure out how to test.
-  if (newCondArgs.size() != condArgs.size())
-    return r.notifyMatchFailure(whileOp, "has redundant cond args");
+  // // FIXME: this is (probably?) handled by other patterns, making it hard to
+  // // test. bail out early for now until i figure out how to test.
+  // if (newCondArgs.size() != condArgs.size())
+  //   return r.notifyMatchFailure(whileOp, "has redundant cond args");
 
   // 1a find all `after`-def uses inside `ifOp.then`:
-  //   - if it's in `condArgs`, map *operand* to `afterArgs[condArgs.index(def)]`
-  //   - else, note that we need a new `condArg`/`afterArg`/`result`, and map *operand* to the `afterArg` somehow
+  //   - if it's in `condArgs`, map *operand* to
+  //   `afterArgs[condArgs.index(def)]`
+  //   - else, note that we need a new `condArg`/`afterArg`/`result`, and map
+  //   *operand* to the `afterArg` somehow
   // 1b find all `after`-defs used inside `ifOp.else`:
   //   - if it's in `condArgs`, map *operand* to `results[condArgs.index(def)]`
-  //   - else, note that we need a new `condArg`/`afterArg`/`result`, and map *operand* to the `result` somehow
-  // 2. for each use of `ifOp` (all of them are in `condArgs`, since no other ops are after the ifop):
-  //   - map `beforeArgs[condArgs.index(res)]` to `ifOp.thenYield.operands[res.resultNumber]`
-  //   - map `while.results[condArgs.index(res)]` to `ifOp.elseYield.operands[res.resultNumber]`
-  //   - mark `res` for removal from `condArgs`/`afterArgs`/`results` (once we delete the `if`, we don't have anything to yield)
+  //   - else, note that we need a new `condArg`/`afterArg`/`result`, and map
+  //   *operand* to the `result` somehow
+  // 2. for each use of `ifOp` (all of them are in `condArgs`, since no other
+  // ops are after the ifop):
+  //   - map `beforeArgs[condArgs.index(res)]` to
+  //   `ifOp.thenYield.operands[res.resultNumber]`
+  //   - map `while.results[condArgs.index(res)]` to
+  //   `ifOp.elseYield.operands[res.resultNumber]`
+  //   - mark `res` for removal from `condArgs`/`afterArgs`/`results` (once we
+  //   delete the `if`, we don't have anything to yield)
   // 3. modify ir
   //   - update `condArgs` and `afterArgs` and `results`
   //   - inline `if.then` to start of `while.after`
   //   - inline `if.else` to after `while`
   //   - apply mappings
 
-  for (Operation &op : ifOp.getThenRegion().getOps()) {
-    for (OpOperand &operand : op.getOpOperands()) {
-      if (operand.get().getParentBlock() == whileOp.getBeforeBody()) {
-        if (Value v = getAfterArgMatchingValue(whileOp, operand.get())) {
-          operandUpdates.push_back({operand, v});
-        } else {
-          return r.notifyMatchFailure(whileOp,
-                                      "`if.then` block uses values that are "
-                                      "only defined inside `before` block");
-        }
-      }
-    }
+  ValueRange condArgs = whileOp.getConditionOp().getArgs();
+  SmallVector<Value> updatedCondArgs(condArgs.begin(), condArgs.end());
+  auto addToNewCondArgs = [&](Value val) -> int {
+    if (auto *it = llvm::find(updatedCondArgs, val);
+        it != updatedCondArgs.end())
+      return it - updatedCondArgs.begin();
+    updatedCondArgs.push_back(val);
+    return updatedCondArgs.size() - 1;
+  };
+
+  SmallVector<std::pair<OpOperand &, int>> thenUpdates;
+  SmallVector<std::pair<OpOperand &, int>> elseUpdates;
+
+  for (Operation &op : ifOp.getThenRegion().getOps())
+    for (OpOperand &operand : op.getOpOperands())
+      if (operand.get().getParentBlock() == whileOp.getBeforeBody())
+        thenUpdates.push_back({operand, addToNewCondArgs(operand.get())});
+
+  for (Operation &op : ifOp.getElseRegion().getOps())
+    for (OpOperand &operand : op.getOpOperands())
+      if (operand.get().getParentBlock() == whileOp.getBeforeBody())
+        elseUpdates.push_back({operand, addToNewCondArgs(operand.get())});
+
+  ArrayRef<Value> newCondArgs =
+      ArrayRef(updatedCondArgs).drop_front(condArgs.size());
+  if (!newCondArgs.empty()) {
+    auto newWhile = r.create<WhileOp>(
+        whileOp.getLoc(), TypeRange(updatedCondArgs), whileOp.getInits());
+    r.inlineRegionBefore(whileOp.getBefore(), newWhile.getBefore(),
+                         newWhile.getBefore().end());
+    r.inlineRegionBefore(whileOp.getAfter(), newWhile.getAfter(),
+                         newWhile.getAfter().end());
+    r.replaceOp(whileOp, newWhile.getResults().drop_back(newCondArgs.size()));
+    whileOp = newWhile;
+
+    r.updateRootInPlace(whileOp.getConditionOp(), [&]() {
+      whileOp.getConditionOp().getArgsMutable().assign(updatedCondArgs);
+    });
+    for (Value newArg : newCondArgs)
+      whileOp.getAfterBody()->addArgument(newArg.getType(), newArg.getLoc());
   }
 
-  for (Operation &op : ifOp.getElseRegion().getOps()) {
-    for (OpOperand &operand : op.getOpOperands()) {
-      if (operand.get().getParentBlock() == whileOp.getBeforeBody()) {
-        if (Value v = getResultMatchingValue(whileOp, operand.get())) {
-          operandUpdates.push_back({operand, v});
-        } else {
-          // TODO: This could be made to work by yielding the extra values.
-          return r.notifyMatchFailure(whileOp,
-                                      "`if.else` block uses values that are "
-                                      "only defined inside `before` block");
-        }
-      }
-    }
-  }
+  // We can apply updates now that the while loop is updated.
+  // TODO: use rewriter here; add this as a method?
+  for (auto [operand, updatedIdx] : thenUpdates)
+    operand.set(whileOp.getAfterArguments()[updatedIdx]);
+  for (auto [operand, updatedIdx] : elseUpdates)
+    operand.set(whileOp.getResults()[updatedIdx]);
 
-  // We can apply updates now that the match can no longer fail.
-  for (std::pair<OpOperand &, Value> &update : operandUpdates)
-    r.updateRootInPlace(update.first.getOwner(),
-                        [&]() { update.first.set(update.second); });
-
-  // Update 'after' region to directly use values defined inside 'then' block.
-  for (auto [condArg, afterArg] : llvm::zip(whileOp.getConditionOp().getArgs(),
-                                            whileOp.getAfterArguments())) {
-    if (condArg.getDefiningOp() == ifOp) {
-      Value thenResult =
-          ifOp.thenYield()
-              .getResults()[cast<OpResult>(condArg).getResultNumber()];
-      r.replaceAllUsesWith(afterArg, thenResult);
-    }
-  }
-
-  // Poison remaining uses of 'if' results; there should be no "real" uses at
-  // this point, and further canonicalizations should clean this up.
-  // TODO: We should really just delete the remaining uses here, to be 100%
-  // sure...
+  // Update all users of `ifOp`
   r.setInsertionPointAfter(ifOp);
-  for (Value ifRes : ifOp.getResults()) {
-    auto poisonOp =
-        r.create<ub::PoisonOp>(ifRes.getLoc(), ifRes.getType(), nullptr);
-    r.replaceAllUsesWith(ifRes, poisonOp);
+  for (auto [condArg, afterArg, whileRes] :
+       llvm::zip_equal(whileOp.getConditionOp().getArgs(),
+                       whileOp.getAfterArguments(), whileOp.getResults())) {
+    if (condArg.getDefiningOp() != ifOp)
+      continue;
+    int resNum = cast<OpResult>(condArg).getResultNumber();
+    r.replaceAllUsesWith(afterArg, ifOp.thenYield().getResults()[resNum]);
+    r.replaceAllUsesWith(whileRes, ifOp.elseYield().getResults()[resNum]);
+    // At this point there aren't any "real" uses of `condArg`; further patterns
+    // will erase this.
+    r.replaceAllUsesWith(
+        condArg,
+        r.create<ub::PoisonOp>(condArg.getLoc(), condArg.getType(), nullptr));
   }
 
+  // Inline `ifOp` blocks.
   r.eraseOp(ifOp.thenYield());
   r.inlineBlockBefore(ifOp.thenBlock(), whileOp.getAfterBody(),
                       whileOp.getAfterBody()->begin());

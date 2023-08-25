@@ -101,8 +101,8 @@ struct RotateWhileLoopPass
     MLIRContext *ctx = parentOp->getContext();
     RewritePatternSet patterns(ctx);
     patterns.add(rotateWhileOp);
-    IfOp::getCanonicalizationPatterns(patterns, ctx);
-    WhileOp::getCanonicalizationPatterns(patterns, ctx);
+    // IfOp::getCanonicalizationPatterns(patterns, ctx);
+    // WhileOp::getCanonicalizationPatterns(patterns, ctx);
     (void)applyPatternsAndFoldGreedily(parentOp, std::move(patterns));
   }
 };
