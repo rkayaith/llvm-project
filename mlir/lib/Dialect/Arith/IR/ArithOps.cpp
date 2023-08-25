@@ -13,6 +13,7 @@
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/CommonFolders.h"
+#include "mlir/Dialect/UB/IR/UBOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributeInterfaces.h"
 #include "mlir/IR/BuiltinAttributes.h"
@@ -2242,6 +2243,11 @@ OpFoldResult arith::SelectOp::fold(FoldAdaptor adaptor) {
       }
     }
   }
+
+  if (isa_and_nonnull<ub::PoisonAttr>(adaptor.getTrueValue()))
+    return falseVal; // TODO: return adaptor.getFalseValue() if possible?
+  if (isa_and_nonnull<ub::PoisonAttr>(adaptor.getFalseValue()))
+    return trueVal; // TODO: return adaptor.getTrueValue() if possible?
 
   return nullptr;
 }
